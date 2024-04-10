@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "llmfunctionclient"
+version = "0.1.0"
+description = ""
+authors = ["James Mills <jimmyemills@gmail.com>"]
+readme = "README.md"
+packages = [{include = "llmfunctionclient"}]
+
+[tool.poetry.dependencies]
+python = "^3.4"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
