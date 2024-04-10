@@ -128,13 +128,13 @@ class FunctionClient:
     """
     self.messages.append({'role': role, 'content': content})
 
-  def __send_message(self, functions: list[Callable], force_function:Optional[str | Callable]=None):
+  def __send_message(self, model, functions: list[Callable], force_function:Optional[str | Callable]=None):
     """
     Sends a message to the language model and processes the response.
     """
     tools, tools_map = self.funcs_to_tools(functions)
     args = {
-      'model': self.model,
+      'model': model,
       'messages': self.messages,
       'tools': tools,
     }
@@ -156,7 +156,7 @@ class FunctionClient:
       self.messages.append({"role": "assistant", "content": message.content})
       return True
 
-  def send_message(self, content: Optional[str]=None, role: Optional[str]=None, functions: Optional[list[Callable]]=None, force_function: Optional[str | Callable]=None) -> str:
+  def send_message(self, model: Optional[str]=None, content: Optional[str]=None, role: Optional[str]=None, functions: Optional[list[Callable]]=None, force_function: Optional[str | Callable]=None) -> str:
     """
     Sends a message to the language model and processes the response, responding to tool call requests until a text response is received.
     Can be called without a content argument to just use current messages.
@@ -172,9 +172,11 @@ class FunctionClient:
        functions = self.functions
     if callable(force_function):
        force_function = force_function.__name__
+    if not model:
+        model = self.model
     done = False
     # Only force_function for the first call to avoid tool call loops
-    done = self.__send_message(functions, force_function)
+    done = self.__send_message(model, functions, force_function)
     while not done:
-      done = self.__send_message(functions)
+      done = self.__send_message(model, functions)
     return self.messages[-1]['content']
