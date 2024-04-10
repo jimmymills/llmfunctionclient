@@ -2,7 +2,6 @@ import inspect
 import re
 import json
 import enum
-from openai import OpenAI
 
 
 def parse_description(s):
@@ -68,13 +67,13 @@ def to_tool(func):
   return tool
 
 class FunctionClient:
-  def __init__(self, model, functions, messages=None):
+  def __init__(self, client, model, functions, messages=None):
      self.tools = [to_tool(func) for func in functions]
      print(self.tools)
      self.tools_map = {func.__name__: func for func in functions}
      self.messages = messages or []
      self.model = model
-     self.client = OpenAI()
+     self.client = client
 
   def add_message(self, content, role='user'):
     self.messages.append({'role': role, 'content': content})
