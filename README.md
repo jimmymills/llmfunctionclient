@@ -58,6 +58,10 @@ When this is run, the following happens under the hood:
 5. The LLM Client Responds with an informed answer.
 6. This response text is passed back.
 
+You can pass functions into the constructor of the client to create the default set of tools for every message as well as pass in the `functions` kwarg to `send_message` to specify a specific set of functions for that portion of the conversation.
+
+To force the LLM to use a specific function, you can pass the `force_function` kwarg with the function (or its name) you want the LLM to use and it will be provided as the tool_choice parameter for the chat completion endpoint.
+
 ## to_tool
 
 If you want to continue using any other LLM clients and just want the ability to convert python functions into JSON Schema compatible with the function calling spec, you can simply import the function to_tool and call that on the function.

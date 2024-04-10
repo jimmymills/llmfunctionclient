@@ -68,27 +68,37 @@ def to_tool(func):
 
 class FunctionClient:
   def __init__(self, client, model, functions, messages=None):
-     self.tools = [to_tool(func) for func in functions]
-     print(self.tools)
-     self.tools_map = {func.__name__: func for func in functions}
      self.messages = messages or []
      self.model = model
      self.client = client
+     self.functions = functions
+
+  @staticmethod
+  def funcs_to_tools(funcs):
+    return [to_tool(func) for func in funcs], {func.__name__: func for func in funcs}
 
   def add_message(self, content, role='user'):
     self.messages.append({'role': role, 'content': content})
 
-  def internal_send_message(self):
+  def internal_send_message(self, functions, force_function = None):
+    tools, tools_map = self.funcs_to_tools(functions)
+    args = {
+      'model': self.model,
+      'messages': self.messages,
+      'tools': tools,
+    }
+    if force_function:
+       args['tool_choice'] = {"type": "function", "function": {"name": force_function}}
     response = self.client.chat.completions.create(
       model=self.model,
       messages=self.messages,
-      tools=self.tools
+      tools=tools,
     )
     message = response.choices[0].message
     if message.tool_calls:
       for tool_call in message.tool_calls:
         args = json.loads(tool_call.function.arguments)
-        result = self.tools_map[tool_call.function.name](**args)
+        result = tools_map[tool_call.function.name](**args)
         print(f'Function call: {tool_call.function.name}({args})')
         self.messages.append({"role": "function", "tool_call_id": tool_call.id, "name": tool_call.function.name, "content": result})
       return False
@@ -96,10 +106,15 @@ class FunctionClient:
       self.messages.append({"role": "assistant", "content": message.content})
       return True
 
-  def send_message(self, role=None, content=None):
+  def send_message(self, content=None, role=None, functions=None, force_function=None):
     if content:
       self.add_message(content, role)
+    if not functions:
+       functions = self.functions
+    if isinstance(force_function, callable):
+       force_function = force_function.__name__
     done = False
+    done = self.internal_send_message(functions, force_function)
     while not done:
-      done = self.internal_send_message()
+      done = self.internal_send_message(functions)
     return self.messages[-1]['content']
