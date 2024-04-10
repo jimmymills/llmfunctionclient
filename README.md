@@ -2,6 +2,11 @@
 
 The purpose of this library is to simplify using function calling with OpenAI-like API clients. Traditionally, you would have to rewrite your functions into JSON Schema and write logic to handle tool calls in responses. With this library, you can convert python functions into JSON schema by simply calling `to_tool(func)` or you can create a client that will handle those tool calls for you and simply pass back a response once the tool call chain is finished by creating an instance of `FunctionClient`.
 
+## Installation
+
+To install simply run:
+`pip install llmfunctionclient`
+
 ## Requirements for Functions
 
 Functions used with this library must have type annotations for each parameter. You do not have to have an annotation for the return type of the function.
