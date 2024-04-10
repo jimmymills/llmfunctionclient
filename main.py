@@ -6,6 +6,8 @@ from openai import OpenAI
 
 
 def parse_description(s):
+    if not s:
+       return '', {}
     # Split the string into lines
     lines = s.strip().split('\n')
 
@@ -38,22 +40,22 @@ def map_enum(param):
   return None
 
 def to_tool(func):
-  descriptions = parse_description(func.__doc__)
+  top_description, param_descriptions = parse_description(func.__doc__)
   parameters = {}
   for name, param in inspect.signature(func).parameters.items():
     param_type = map_type(param)
     options = map_enum(param)
     parameters[name] = {
       'type': param_type,
-      'description': descriptions[1].get(name, ''),
     }
     if options:
       parameters[name]['enum'] = options
-  return {
+    if name in param_descriptions:
+      parameters[name]['description'] = param_descriptions[name]
+  tool = {
     'type': 'function',
     'function': {
       'name': func.__name__,
-      'description': descriptions[0],
       'parameters': {
         'type': 'object',
         'properties': parameters,
@@ -61,6 +63,9 @@ def to_tool(func):
       },
     }
   }
+  if top_description:
+    tool['description'] = top_description
+  return tool
 
 class FunctionClient:
   def __init__(self, model, functions, messages=None):
