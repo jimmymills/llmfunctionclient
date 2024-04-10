@@ -5,25 +5,28 @@ import enum
 from typing import Callable, Optional
 
 def parse_description(func: Callable) -> tuple[str, dict[str, str]]:
-    s = func.__doc__
-    if not s:
-       return '', {}
-    # Split the string into lines
-    lines = s.strip().split('\n')
+  """
+  Parses the description of a function and returns the top level function description and parameter descriptions.
+  """
+  s = func.__doc__
+  if not s:
+     return '', {}
+  # Split the string into lines
+  lines = s.strip().split('\n')
 
-    # The first line is the top description
-    top_description = lines[0].strip()
+  # The first line is the top description
+  top_description = lines[0].strip()
 
-    # The rest of the lines are parameter descriptions
-    param_descriptions = {}
-    for line in lines[1:]:
-        # Use a regular expression to split the line into the parameter name and description
-        match = re.match(r'\s*(\w+):\s*(.*)', line)
-        if match:
-            param_name, param_description = match.groups()
-            param_descriptions[param_name] = param_description.strip()
+  # The rest of the lines are parameter descriptions
+  param_descriptions = {}
+  for line in lines[1:]:
+      # Use a regular expression to split the line into the parameter name and description
+      match = re.match(r'\s*(\w+):\s*(.*)', line)
+      if match:
+          param_name, param_description = match.groups()
+          param_descriptions[param_name] = param_description.strip()
 
-    return top_description, param_descriptions
+  return top_description, param_descriptions
 
 def map_type(param: inspect.Parameter) -> str:
   """
@@ -47,23 +50,37 @@ def map_enum(param: inspect.Parameter) -> list[str] | None:
   return None
 
 def parse_parameters(func: Callable, param_descriptions: dict[str, str]) -> dict[str, dict[str, str] | list[str] | str]:
-    parameters = {}
-    for name, param in inspect.signature(func).parameters.items():
-        param_type = map_type(param)
-        options = map_enum(param)
-        parameters[name] = {
-            'type': param_type,
-        }
-        if options:
-            parameters[name]['enum'] = options
-        if name in param_descriptions:
-            parameters[name]['description'] = param_descriptions[name]
-    return parameters
+  """
+  Parses the parameters of a function and returns a JSON Schema object
+  """
+  parameters = {}
+  for name, param in inspect.signature(func).parameters.items():
+      param_type = map_type(param)
+      options = map_enum(param)
+      parameters[name] = {
+          'type': param_type,
+      }
+      if options:
+          parameters[name]['enum'] = options
+      if name in param_descriptions:
+          parameters[name]['description'] = param_descriptions[name]
+  return parameters
 
 def get_required(func: Callable) -> list[str]:
-    return [name for name, param in inspect.signature(func).parameters.items() if param.default == inspect.Parameter.empty]
+  """
+  Gets the required parameters for a function, checking which don't have default values
+  """
+  return [name for name, param in inspect.signature(func).parameters.items() if param.default == inspect.Parameter.empty]
 
 def to_tool(func: Callable) -> dict[str, dict[str, str] | dict[str, dict[str, str]] | list[str] | str]:
+  """
+  Converts a function to a tool object for use with an OpenAI-like API.
+
+  The function must contain type annotations and only have parameters that are strings, 
+  integers and can be enums of those two types. Optionally, including a docstring for the function
+  will be used as the description for the tool for the first line. Subsequent lines will be used as
+  descriptions for the parameters with the format <parameter_name>: <parameter_description>
+  """
   top_description, param_descriptions = parse_description(func)
   tool = {
     'type': 'function',
@@ -81,20 +98,40 @@ def to_tool(func: Callable) -> dict[str, dict[str, str] | dict[str, dict[str, st
   return tool
 
 class FunctionClient:
+  """
+  A client for interacting with a language model that supports function calls.
+  """
   def __init__(self, client, model: str, functions: list[Callable], messages: Optional[list[dict[str, str]]]=None):
-     self.messages = messages or []
-     self.model = model
-     self.client = client
-     self.functions = functions
+    """
+    Initializes the client with a language model, functions, and messages.
+
+    client: The OpenAI-like client
+    model: The language model to use
+    functions: A default list of functions to call
+    messages: A list of messages to start the conversation with
+    """
+    self.messages = messages or []
+    self.model = model
+    self.client = client
+    self.functions = functions
 
   @staticmethod
   def funcs_to_tools(funcs: list[Callable]) -> tuple[list[dict[str, dict[str, str] | dict[str, dict[str, str]] | list[str] | str]], dict[str, Callable]]:
+    """
+    Converts a list of functions to a list of tools and a dictionary mapping function names to functions.
+    """
     return [to_tool(func) for func in funcs], {func.__name__: func for func in funcs}
 
   def add_message(self, content: str, role: Optional[str]='user'):
+    """
+    Adds a message to the conversation.
+    """
     self.messages.append({'role': role, 'content': content})
 
   def __send_message(self, functions: list[Callable], force_function:Optional[str | Callable]=None):
+    """
+    Sends a message to the language model and processes the response.
+    """
     tools, tools_map = self.funcs_to_tools(functions)
     args = {
       'model': self.model,
@@ -120,6 +157,15 @@ class FunctionClient:
       return True
 
   def send_message(self, content: Optional[str]=None, role: Optional[str]=None, functions: Optional[list[Callable]]=None, force_function: Optional[str | Callable]=None) -> str:
+    """
+    Sends a message to the language model and processes the response, responding to tool call requests until a text response is received.
+    Can be called without a content argument to just use current messages.
+
+    content: Optional, the content of the message.
+    role: Optional, the role of the message, defaults to 'user'.
+    functions: Optional, the list of functions to use, defaults to the list of functions passed to the constructor.
+    force_function: Optional, a function or the name of the function to force the model to call.
+    """
     if content:
       self.add_message(content, role)
     if not functions:
@@ -127,6 +173,7 @@ class FunctionClient:
     if callable(force_function):
        force_function = force_function.__name__
     done = False
+    # Only force_function for the first call to avoid tool call loops
     done = self.__send_message(functions, force_function)
     while not done:
       done = self.__send_message(functions)
