@@ -2,9 +2,10 @@ import inspect
 import re
 import json
 import enum
+from typing import Callable, Optional
 
-
-def parse_description(s):
+def parse_description(func: Callable) -> tuple[str, dict[str, str]]:
+    s = func.__doc__
     if not s:
        return '', {}
     # Split the string into lines
@@ -24,41 +25,54 @@ def parse_description(s):
 
     return top_description, param_descriptions
 
-# Maps a parameters type to one of string or integer
-def map_type(param):
-    if issubclass(param.annotation, str):
-        return 'string'
-    elif issubclass(param.annotation, int):
-        return 'integer'
-    else:
-        raise ValueError(f'Unsupported parameter type: {param.annotation}')
+def map_type(param: inspect.Parameter) -> str:
+  """
+  Maps a parameter type to a JSON Schema type
 
-def map_enum(param):
+  Raises a ValueError if the parameter type is not supported
+  """
+  if issubclass(param.annotation, str):
+      return 'string'
+  elif issubclass(param.annotation, int):
+      return 'integer'
+  else:
+      raise ValueError(f'Unsupported parameter type: {param.annotation}')
+
+def map_enum(param: inspect.Parameter) -> list[str] | None:
+  """
+  Gets the enum argument for a parameter if it is an enum, otherwise returns None
+  """
   if issubclass(param.annotation, enum.Enum):
     return [e.name for e in param.annotation]
   return None
 
-def to_tool(func):
-  top_description, param_descriptions = parse_description(func.__doc__)
-  parameters = {}
-  for name, param in inspect.signature(func).parameters.items():
-    param_type = map_type(param)
-    options = map_enum(param)
-    parameters[name] = {
-      'type': param_type,
-    }
-    if options:
-      parameters[name]['enum'] = options
-    if name in param_descriptions:
-      parameters[name]['description'] = param_descriptions[name]
+def parse_parameters(func: Callable, param_descriptions: dict[str, str]) -> dict[str, dict[str, str] | list[str] | str]:
+    parameters = {}
+    for name, param in inspect.signature(func).parameters.items():
+        param_type = map_type(param)
+        options = map_enum(param)
+        parameters[name] = {
+            'type': param_type,
+        }
+        if options:
+            parameters[name]['enum'] = options
+        if name in param_descriptions:
+            parameters[name]['description'] = param_descriptions[name]
+    return parameters
+
+def get_required(func: Callable) -> list[str]:
+    return [name for name, param in inspect.signature(func).parameters.items() if param.default == inspect.Parameter.empty]
+
+def to_tool(func: Callable) -> dict[str, dict[str, str] | dict[str, dict[str, str]] | list[str] | str]:
+  top_description, param_descriptions = parse_description(func)
   tool = {
     'type': 'function',
     'function': {
       'name': func.__name__,
       'parameters': {
         'type': 'object',
-        'properties': parameters,
-        'required': [name for name, param in inspect.signature(func).parameters.items()if param.default == inspect.Parameter.empty]
+        'properties': parse_parameters(func, param_descriptions),
+        'required': get_required(func), 
       },
     }
   }
@@ -67,20 +81,20 @@ def to_tool(func):
   return tool
 
 class FunctionClient:
-  def __init__(self, client, model, functions, messages=None):
+  def __init__(self, client, model: str, functions: list[Callable], messages: Optional[list[dict[str, str]]]=None):
      self.messages = messages or []
      self.model = model
      self.client = client
      self.functions = functions
 
   @staticmethod
-  def funcs_to_tools(funcs):
+  def funcs_to_tools(funcs: list[Callable]) -> tuple[list[dict[str, dict[str, str] | dict[str, dict[str, str]] | list[str] | str]], dict[str, Callable]]:
     return [to_tool(func) for func in funcs], {func.__name__: func for func in funcs}
 
-  def add_message(self, content, role='user'):
+  def add_message(self, content: str, role: Optional[str]='user'):
     self.messages.append({'role': role, 'content': content})
 
-  def internal_send_message(self, functions, force_function = None):
+  def __send_message(self, functions: list[Callable], force_function:Optional[str | Callable]=None):
     tools, tools_map = self.funcs_to_tools(functions)
     args = {
       'model': self.model,
@@ -99,22 +113,21 @@ class FunctionClient:
       for tool_call in message.tool_calls:
         args = json.loads(tool_call.function.arguments)
         result = tools_map[tool_call.function.name](**args)
-        print(f'Function call: {tool_call.function.name}({args})')
         self.messages.append({"role": "function", "tool_call_id": tool_call.id, "name": tool_call.function.name, "content": result})
       return False
     else:
       self.messages.append({"role": "assistant", "content": message.content})
       return True
 
-  def send_message(self, content=None, role=None, functions=None, force_function=None):
+  def send_message(self, content: Optional[str]=None, role: Optional[str]=None, functions: Optional[list[Callable]]=None, force_function: Optional[str | Callable]=None) -> str:
     if content:
       self.add_message(content, role)
     if not functions:
        functions = self.functions
-    if isinstance(force_function, callable):
+    if callable(force_function):
        force_function = force_function.__name__
     done = False
-    done = self.internal_send_message(functions, force_function)
+    done = self.__send_message(functions, force_function)
     while not done:
-      done = self.internal_send_message(functions)
+      done = self.__send_message(functions)
     return self.messages[-1]['content']
