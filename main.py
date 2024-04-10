@@ -1,6 +1,7 @@
 import inspect 
 import re
 import json
+import enum
 from openai import OpenAI
 
 
@@ -24,21 +25,30 @@ def parse_description(s):
 
 # Maps a parameters type to one of string or integer
 def map_type(param):
-    if param.annotation == str:
+    if issubclass(param.annotation, str):
         return 'string'
-    elif param.annotation == int:
+    elif issubclass(param.annotation, int):
         return 'integer'
     else:
         raise ValueError(f'Unsupported parameter type: {param.annotation}')
+
+def map_enum(param):
+  if issubclass(param.annotation, enum.Enum):
+    return [e.name for e in param.annotation]
+  return None
 
 def to_tool(func):
   descriptions = parse_description(func.__doc__)
   parameters = {}
   for name, param in inspect.signature(func).parameters.items():
+    param_type = map_type(param)
+    options = map_enum(param)
     parameters[name] = {
-      'type': map_type(param),
+      'type': param_type,
       'description': descriptions[1].get(name, ''),
     }
+    if options:
+      parameters[name]['enum'] = options
   return {
     'type': 'function',
     'function': {
