@@ -176,7 +176,7 @@ class FunctionClient:
         model = self.model
     done = False
     # Only force_function for the first call to avoid tool call loops
-    done = self.__send_message(model, functions, force_function)
+    done = self.__send_message(functions, force_function, model=model)
     while not done:
-      done = self.__send_message(model, functions)
+      done = self.__send_message(functions, model=model)
     return self.messages[-1]['content']
