@@ -26,7 +26,7 @@ def get_weather(location: str):
   return f"The weather in {location} is 75 degrees"
 ```
 
-This function will have "Gets the weather" as the function description and the location parameter will have the description "where to get the forecase for"
+This function will have "Gets the weather" as the function description and the location parameter will have the description "where to get the forecast for"
 
 ## FunctionClient
 
@@ -51,8 +51,8 @@ print(response) # "The current weather in Los Angeles is 75 degrees"
 ```
 
 When this is run, the following happens under the hood:  
-1. The two message specified here will be submitted to the LLM Client
-2. The LLM Client responds with a tool call for "get_weather"
+1. The two messages specified here will be submitted to the LLM Client
+2. The LLM Client responds with a tool called for "get_weather"
 3. The get_weather function is called and the result is appended as a message
 4. The LLM Client is called again with the function result.
 5. The LLM Client Responds with an informed answer.
