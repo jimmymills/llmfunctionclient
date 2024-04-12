@@ -156,7 +156,7 @@ class FunctionClient:
       self.messages.append({"role": "assistant", "content": message.content})
       return True
 
-  def send_message(self, content: Optional[str]=None, role: Optional[str]=None, model: Optional[str]=None, functions: Optional[list[Callable]]=None, force_function: Optional[str | Callable]=None) -> str:
+  def send_message(self, content: Optional[str]=None, role: Optional[str]=None, model: Optional[str]=None, functions: Optional[list[Callable]]=None, force_function: Optional[str | Callable]=None, num_calls: Optional[int]=100) -> str:
     """
     Sends a message to the language model and processes the response, responding to tool call requests until a text response is received.
     Can be called without a content argument to just use current messages.
@@ -175,8 +175,10 @@ class FunctionClient:
     if not model:
         model = self.model
     done = False
+    i = 0
     # Only force_function for the first call to avoid tool call loops
     done = self.__send_message(functions, force_function, model=model)
-    while not done:
+    i += 1
+    while not done and i < num_calls:
       done = self.__send_message(functions, model=model)
     return self.messages[-1]['content']
